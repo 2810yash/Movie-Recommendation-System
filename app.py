@@ -5,7 +5,7 @@ import os
 
 st.title('Movie Recommendation System')
 
-# Function to download similarity.pkl from a drive URL
+# Function to download similarity.pkl from a URL
 def download_file(url, local_path):
     if not os.path.exists(local_path):
         st.info(f"Downloading {local_path}...")
