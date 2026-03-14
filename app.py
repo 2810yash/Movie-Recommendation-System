@@ -12,6 +12,7 @@ import streamlit as st
 
 st.set_page_config(page_title="Movie Recommender", layout="wide")
 
+st.write(""*100+"")
 st.title("Movie Recommendation System")
 st.caption("Pick a movie you like and get similar recommendations.")
 
