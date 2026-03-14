@@ -1,6 +1,7 @@
 import streamlit as st
 import pickle
 import requests
+import gdown
 import os
 
 st.set_page_config(page_title="Movie Recommender", layout="wide")
@@ -8,25 +9,16 @@ st.set_page_config(page_title="Movie Recommender", layout="wide")
 st.title("🎬 Movie Recommendation System")
 
 # -----------------------------
-# Download similarity file safely
+# Download similarity model
 # -----------------------------
-def download_file(url, local_path):
-    if not os.path.exists(local_path):
-        st.info("Downloading similarity model (~367MB). Please wait...")
 
-        with requests.get(url, stream=True) as r:
-            r.raise_for_status()
-            with open(local_path, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-
-        st.success("Model downloaded successfully!")
-
-SIMILARITY_URL = "https://drive.google.com/uc?export=download&id=1_eDHLqcniMOPMkqTBwDOWOJutZVq8RsI"
+SIMILARITY_URL = "https://drive.google.com/uc?id=1_eDHLqcniMOPMkqTBwDOWOJutZVq8RsI"
 SIMILARITY_LOCAL_PATH = "similarity.pkl"
 
-download_file(SIMILARITY_URL, SIMILARITY_LOCAL_PATH)
+if not os.path.exists(SIMILARITY_LOCAL_PATH):
+    st.info("Downloading similarity model (~367MB)... Please wait.")
+    gdown.download(SIMILARITY_URL, SIMILARITY_LOCAL_PATH, quiet=False)
+    st.success("Download completed!")
 
 # -----------------------------
 # Load data with caching
@@ -47,12 +39,11 @@ def fetch_poster(movie_id):
     try:
         url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key=6b2ccec43e41102d31886e12994af77d&language=en-US"
         data = requests.get(url).json()
-        poster_path = data.get("poster_path")
 
-        if poster_path:
-            return "https://image.tmdb.org/t/p/w500" + poster_path
-        else:
-            return "https://via.placeholder.com/500x750?text=No+Image"
+        if data.get("poster_path"):
+            return "https://image.tmdb.org/t/p/w500" + data["poster_path"]
+
+        return "https://via.placeholder.com/500x750?text=No+Image"
 
     except:
         return "https://via.placeholder.com/500x750?text=Error"
@@ -66,8 +57,8 @@ def recommend(movie):
 
     movie_list = sorted(
         list(enumerate(distances)),
-        reverse=True,
-        key=lambda x: x[1]
+        key=lambda x: x[1],
+        reverse=True
     )[1:11]
 
     recommended_movies = []
