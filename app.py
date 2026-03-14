@@ -1,4 +1,5 @@
 import difflib
+import html
 import os
 import pickle
 from pathlib import Path
@@ -64,13 +65,13 @@ def _ensure_similarity_file() -> None:
     if os.path.exists(SIMILARITY_LOCAL_PATH):
         return
 
-    st.info("Downloading similarity model (~367MB)... Please wait.")
     try:
-        gdown.download(SIMILARITY_URL, SIMILARITY_LOCAL_PATH, quiet=False)
+        with st.spinner("Downloading similarity model (~367MB)... Please wait."):
+            # gdown prints progress to the terminal; keep UI minimal and auto-clear.
+            gdown.download(SIMILARITY_URL, SIMILARITY_LOCAL_PATH, quiet=False)
     except Exception as exc:
         st.error(f"Download failed: {exc}")
         st.stop()
-    st.success("Download completed!")
 
 
 @st.cache_resource
@@ -206,6 +207,43 @@ st.markdown(
     """
     <style>
     .block-container { padding-top: 1.2rem; padding-bottom: 2rem; max-width: 1200px; }
+    /* Hide Streamlit's per-image fullscreen icon */
+    button[title="View fullscreen"] { display: none !important; }
+    [data-testid="StyledFullScreenButton"] { display: none !important; }
+    /* Consistent poster sizing (avoid masonry layout) */
+    .poster {
+        width: 100%;
+        aspect-ratio: 2 / 3;
+        object-fit: cover;
+        border-radius: 14px;
+        border: 1px solid rgba(127,127,127,0.25);
+        background: rgba(127,127,127,0.10);
+        display: block;
+    }
+    .poster-title { margin-top: 0.35rem; font-weight: 600; line-height: 1.2; }
+
+    .poster-card { position: relative; }
+    .poster-overlay {
+        position: absolute;
+        inset: 0;
+        border-radius: 14px;
+        opacity: 0;
+        transition: opacity 140ms ease-in-out;
+        padding: 12px 12px;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        background: linear-gradient(
+            180deg,
+            rgba(0,0,0,0.00) 35%,
+            rgba(0,0,0,0.66) 80%,
+            rgba(0,0,0,0.86) 100%
+        );
+        color: rgba(255,255,255,0.92);
+        pointer-events: none;
+    }
+    .poster-card:hover .poster-overlay { opacity: 1; }
+    .overlay-text { font-size: 0.9rem; line-height: 1.25; max-height: 6.2em; overflow: hidden; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -243,7 +281,8 @@ left, right = st.columns([1, 2])
 with left:
     st.subheader("Selected movie")
     if selected_movie_id is not None:
-        st.image(fetch_poster(selected_movie_id), use_column_width=True)
+        poster_url = fetch_poster(selected_movie_id)
+        st.markdown(f"<img class='poster' src='{poster_url}' />", unsafe_allow_html=True)
     st.caption(selected_movie)
 
 with right:
@@ -251,6 +290,32 @@ with right:
     if selected_tags:
         st.write(selected_tags[:420] + ("..." if len(selected_tags) > 420 else ""))
     clicked = st.button("Recommend", type="primary")
+
+
+# Keep recommendations visible across reruns.
+if "recs_names" not in st.session_state:
+    st.session_state["recs_names"] = []
+if "recs_posters" not in st.session_state:
+    st.session_state["recs_posters"] = []
+if "recs_for_title" not in st.session_state:
+    st.session_state["recs_for_title"] = ""
+
+
+@st.cache_resource
+def _title_to_tags_map():
+    # Fast lookup for hover overlays.
+    # titles are unique enough for this dataset usage; we take the first if duplicates exist.
+    return movies.groupby("title", sort=False)["tags"].first().to_dict()
+
+
+def _tags_snippet(title: str, limit: int = 260) -> str:
+    tags = _title_to_tags_map().get(title, "")
+    tags = str(tags) if tags is not None else ""
+    tags = " ".join(tags.split())
+    if not tags:
+        return ""
+    return tags[:limit] + ("..." if len(tags) > limit else "")
+
 
 if clicked:
     with st.spinner("Finding similar movies..."):
@@ -260,9 +325,36 @@ if clicked:
         st.error("Could not generate recommendations for that title.")
         st.stop()
 
+    st.session_state["recs_names"] = names
+    st.session_state["recs_posters"] = posters
+    st.session_state["recs_for_title"] = selected_movie
+
+
+names = st.session_state.get("recs_names") or []
+posters = st.session_state.get("recs_posters") or []
+if names:
     st.subheader("Recommended movies")
-    cols = st.columns(int(grid_cols))
-    for i, (name, poster) in enumerate(zip(names, posters)):
-        with cols[i % int(grid_cols)]:
-            st.image(poster, use_column_width=True)
-            st.caption(name)
+    cols_count = int(grid_cols)
+    for row_start in range(0, len(names), cols_count):
+        cols = st.columns(cols_count)
+        for j in range(cols_count):
+            idx = row_start + j
+            if idx >= len(names):
+                break
+            name = names[idx]
+            poster = posters[idx] if idx < len(posters) else POSTER_FALLBACK_URL
+            with cols[j]:
+                safe_title = html.escape(str(name))
+                safe_desc = html.escape(_tags_snippet(name))
+                st.markdown(
+                    f"""
+<div class="poster-card">
+  <img class="poster" src="{poster}" alt="{safe_title}" />
+  <div class="poster-overlay">
+    <div class="overlay-text">{safe_desc}</div>
+  </div>
+</div>
+<div class="poster-title">{safe_title}</div>
+""",
+                    unsafe_allow_html=True,
+                )
