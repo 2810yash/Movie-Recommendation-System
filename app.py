@@ -43,10 +43,11 @@ def fetch_poster(movie_id):
         if data.get("poster_path"):
             return "https://image.tmdb.org/t/p/w500" + data["poster_path"]
 
-        return "https://via.placeholder.com/500x750?text=No+Image"
+        return "https://cdni.iconscout.com/illustration/premium/thumb/data-not-found-illustration-svg-download-png-9404367.png"
 
     except:
-        return "https://via.placeholder.com/500x750?text=Error"
+        return "https://learn.getgrav.org/user/pages/17/11.troubleshooting/01.page-not-found/404-not-found.png"
+        
 
 # -----------------------------
 # Recommendation function
